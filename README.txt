@@ -6,7 +6,7 @@ Author: Tyler Hullinger - http://drupal.org/user/1993698
 
 Overview:
 --------
-BlockCT (Block Content Type) utilizes the modules nodesinblock and blockcss to create a content type of block which allows users to manage blocks from within that content type. This is very useful if you are creating a site for someone you do not want to touch the actual block settings in the admin menu.
+BlockCT (Block Content Type) utilizes the modules nodeblock and blockcss to create a content type of block which allows users to manage blocks from within that content type. This is very useful if you are creating a site for someone you do not want to touch the actual block settings in the admin menu.
 
 Installation:
 -------------
