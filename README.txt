@@ -1,6 +1,6 @@
 Nodes in block
 --------------
-Requires Drupal 7, block module, nodesinblock module and blockcss module.
+Requires Drupal 7, block module, nodeblock module and blockcss module.
 
 Author: Tyler Hullinger - http://drupal.org/user/1993698
 
