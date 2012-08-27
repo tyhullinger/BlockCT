@@ -16,7 +16,7 @@ Installation:
 
 Configuration:
 --------------
-Go to "administer -> settings -> BlockCT" 
+Go to "administer -> structure -> BlockCT" 
 
 Allows for you to specify different styles that are applied to the block. This will end up being theme specific and I plan to allow certain class styles available per theme in the future.
 
