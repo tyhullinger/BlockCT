@@ -1,0 +1,96 @@
+<?php
+/**
+ * @file
+ * BlockCT install file
+ */
+
+/**
+ * Implements hook_install().
+ */
+function blockct_install() {
+  // Create the default blockct 
+  $blockct_type = array(
+    'type' => 'blockct',
+    'name' => st('Block CT'),
+    'base' => 'node_content',
+    'description' => t('Create a new block that will be displayed within your current theme.'),
+    'custom' => TRUE,
+    'modified' => TRUE,
+    'locked' => FALSE,
+  );
+
+  //add variables for nodeblock
+  variable_set('nodeblock_blockct', 1);
+  variable_set('nodeblock_comment_link_blockct', 0);
+  variable_set('nodeblock_node_link_blockct', 0);
+  variable_set('nodeblock_view_mode_blockct', 'full');
+
+  $content_type = node_type_set_defaults($blockct_type);
+  node_add_body_field($content_type);
+
+  //check for create or update
+  $status = node_type_save($content_type);
+
+  //replacement rule for messages
+  $t_args = array('%name' => $content_type->name);
+  if ($status == SAVED_UPDATED) { // update case
+    drupal_set_message(t('The content type %name has been updated.', $t_args));
+  }
+  elseif ($status == SAVED_NEW) { // create case
+    drupal_set_message(t('The content type %name has been added.', $t_args));
+    watchdog('node', 'Added content type %name.', $t_args, WATCHDOG_NOTICE, l(t('view'), 'admin/structure/types'));
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function blockct_uninstall() {
+  // Gather all the example content that might have been created while this
+  // module was enabled.  Simple selects still use db_query().
+  // http://api.drupal.org/api/function/db_query/7
+  $sql = 'SELECT nid FROM {node} n WHERE n.type = :type';
+  $result = db_query($sql, array(':type' => 'blockct'));
+  $nids = array();
+  foreach ($result as $row) {
+    $nids[] = $row->nid;
+  }
+  // Delete all the nodes at once
+  // http://api.drupal.org/api/function/node_delete_multiple/7
+  node_delete_multiple($nids);
+  // Delete our content type
+  // http://api.drupal.org/api/function/node_type_delete/7
+  node_type_delete('blockct');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function blockct_schema($caller_function = FALSE) {
+  $schema['blockct_styles'] = array(
+    'fields' => array(
+      'blockct_id' => array(
+        'type' => 'serial', 
+        'not null' => TRUE, 
+        'description' => "",
+      ),
+      'theme' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The theme to hold style information for.',
+      ),
+      'styles' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'description' => 'Text that holds available styles per theme.',
+      ),
+    ),
+    'primary key' => array('blockct_id'),
+    'indexes' => array(
+      'blockct_id' => array('blockct_id'),
+    ),
+  );
+  return $schema;
+}

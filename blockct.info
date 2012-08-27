@@ -1,0 +1,13 @@
+name = Block Content Type
+description = "Allows for users to manage blocks directly within a content type."
+core = 7.x
+version = VERSION
+dependencies[] = block
+dependencies[] = block_class
+dependencies[] = nodeblock
+
+version = 7.x-1.0-dev
+files[] = blockct.module 
+files[] = blockct.install
+files[] = blockct.admin.inc
+files[] = blockct.test

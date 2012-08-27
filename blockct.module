@@ -1,0 +1,341 @@
+<?php
+/**
+ * @file
+ * blockct.module file
+ */
+
+/**
+ * Implements hook_permission().
+ * TODO implement permissions possibily
+ */
+/*function blockct_permission() {
+  return array(
+    'administer nodes in block configuration' => array(
+      'title' => t('Configure Nodes in block'),
+    ),
+    'administer nodes in block queue' => array(
+      'title' => t('Administer nodes in block queue'),
+    ),
+    'deny configuration on node form' => array(
+      'title' => t('Deny configuration on node form')
+    ),
+  );
+}*/
+
+/**
+ * Implements hook_menu().
+ */
+function blockct_menu() {
+  $items = array();
+  $items['admin/structure/blockct'] = array(
+    'title' => 'BlockCT',
+    'description' => 'Setup BlockCT',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('blockct_settings'),
+    'access arguments' => array('administer content types'),
+    'file' => 'blockct.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Impelments hook_module_implements_alter();
+ *
+ * Make sure that the hook_node_insert() for blockct is executed last.
+ *
+ * @return void
+ * @param $implementations
+ *  array of hooks to be called per module
+ * @param $hook
+ *  the hook that is being called
+ */
+function blockct_module_implements_alter(&$implementations, $hook) {
+  if($hook == 'node_insert') {
+    $group = $implementations['blockct'];
+    unset($implementations['blockct']);
+    $implementations['blockct'] = $group;
+  }
+  if($hook == 'node_delete') {
+    $group = $implementations['blockct'];
+    unset($implementations['blockct']);
+    $implementations['blockct'] = $group;
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter()
+ *
+ * Add some form elements to the node block form so we can manage the blocks
+ * within the node edit form.
+ *
+ * @return $form
+ *  array of form elements
+ * @param $form
+ *  an array of form elements to be altered
+ * @param $form_state
+ *  the state of the form
+ * @param $form_id
+ *  the form id
+ */
+function blockct_form_blockct_node_form_alter(&$form, &$form_state, $form_id) {
+  $default_theme = variable_get('theme_default', 'bartik');
+  $regions = system_region_list($default_theme, REGIONS_VISIBLE);
+  $regions = array_merge(array('-1' => '- None -'), $regions);
+
+  $block_class = '';
+  $block_region = '';
+  $block_weight = '';
+  $block_pages = '';
+  $block_title = 1;
+  $block_styles = array('' => 'None');
+
+  if($form['#node_edit_form']) {
+    $block_class = _blockct_get_block_css_class($form['nid']['#value']);
+    $block_data = _blockct_get_block_data($form['nid']['#value']);
+    $block_styles_data = _blockct_get_style_data();
+
+    if(array_key_exists('styles', $block_styles_data)) {
+      $block_styles = array_merge($block_styles, _blockct_parse_styles($block_styles_data['styles']));
+    }
+
+    if(is_array($block_data)) {
+      $block_region = $block_data['region'];
+      $block_weight = $block_data['weight'];
+      $block_pages = $block_data['pages'];
+      $block_title = ($block_data['title'] == '<none>') ? 0 : 1;
+    }
+  }
+
+  $form['blockct_settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Display settings',
+    '#weight' => 20,
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  $form['blockct_settings']['blockct_css'] = array(
+    '#type' => 'select',
+    '#title' => 'Block style',
+    '#description' => 'Choose the style that the block should use.',
+    '#options' => $block_styles,
+    '#default_value' => $block_class,
+    '#weight' => 20,
+  );
+
+  $form['blockct_settings']['blockct_title'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Show block title',
+    '#description' => 'Check this box if you want the block title to be displayed.',
+    '#default_value' => $block_title,
+    '#weight' => 21,
+  );
+
+  $form['blockct_settings']['blockct_region'] = array(
+    '#type' => 'select',
+    '#title' => 'Display area',
+    '#description' => 'Choose where this block should be displayed.',
+    '#options' => $regions,
+    '#default_value' => $block_region,
+    '#weight' => 22,
+  );
+
+  $weights = array();
+  for($i = 24; $i > 0; $i--) {
+    $weights["-$i"] = "-$i";
+  }
+
+  $weights['0'] = '0';
+
+  for($i = 1; $i <= 24; $i++) {
+    $weights["$i"] = "$i";
+  }
+
+  $form['blockct_settings']['blockct_weight'] = array(
+    '#type' => 'select',
+    '#title' => 'Display weight',
+    '#description' => 'Specify the weight of the block. The smaller the number the higher the priority.',
+    '#options' => $weights,
+    '#default_value' => $block_weight,
+    '#weight' => 23,
+  );
+
+
+  $description = t("Specify pages by using their paths. Enter one path per line. The '*' character is a wildcard. Example paths are %blog for the blog page and %blog-wildcard for every personal blog. %front is the front page.", array('%blog' => 'blog', '%blog-wildcard' => 'blog/*', '%front' => '<front>'));
+
+  $form['blockct_settings']['blockct_pages'] = array(
+    '#type' => 'textarea',
+    '#title' => 'Pages to display on',
+    '#default_value' => $block_pages,
+    '#description' => $description,
+    '#weight' => 24,
+  );
+  return $form;
+}
+
+/**
+ * Implements hook_node_insert();
+ *
+ * nodeblock appears to have an issue distinguishing between the default theme
+ * and the admin theme that is set. When it saves a block into the system and
+ * you have a different admin theme set it will insert the block referencing the
+ * admin theme instead of the default theme. This module will override that
+ * funcitonality and make it so that it will apply to the default theme.
+ *
+ *
+ * @return void
+ * @param $node
+ *  the node object that was inserted
+ */
+function blockct_node_insert($node) {
+  if($node->type == 'blockct') {
+    $data = array('module' => 'nodeblock', 'delta' => $node->nid, 'css_class' => $node->blockct_css);
+    db_insert('block_class')->fields($data)->execute();
+
+    $default_theme = variable_get('theme_default', 'bartik');
+    $visibility = (strlen($node->blockct_pages) > 0) ? 1 : 0;
+    $show_title = ($node->blockct_title == 1) ? '' : '<none>';
+    $data = array('status' => 1, 'region' => $node->blockct_region, 'weight' => $node->blockct_weight, 'pages' => $node->blockct_pages, 'visibility' => $visibility, 'title' => $show_title);
+
+    $update = db_update('block')
+      ->fields($data)
+      ->condition('module', 'nodeblock', '=')
+      ->condition('theme', $default_theme, '=')
+      ->condition('delta', $node->nid, '=')
+      ->execute();
+    _block_rehash();
+    drupal_goto('');
+  }
+}
+
+/**
+ * Implements hook_node_update();
+ *
+ * @return void
+ * @param $node
+ *  the node object that was updated
+ */
+function blockct_node_update($node) {
+  if($node->type == 'blockct') {
+    db_update('block_class')
+      ->fields(array('css_class' => $node->blockct_css))
+      ->condition('module', 'nodeblock', '=')
+      ->condition('delta', $node->nid, '=')
+      ->execute();
+
+    $default_theme = variable_get('theme_default', 'bartik');
+    $visibility = (strlen($node->blockct_pages) > 0) ? 1 : 0;
+    $show_title = ($node->blockct_title == 1) ? '' : '<none>';
+
+    $data = array('status' => 1, 'region' => $node->blockct_region, 'weight' => $node->blockct_weight, 'pages' => $node->blockct_pages, 'visibility' => $visibility, 'title' => $show_title);
+    db_update('block')
+      ->fields($data)
+      ->condition('theme', $default_theme, '=')
+      ->condition('module', 'nodeblock', '=')
+      ->condition('delta', $node->nid, '=')
+      ->execute();
+
+    _block_rehash();
+    drupal_goto('');
+  }
+}
+
+/**
+ * Implements hook_node_delete();
+ *
+ * Fixes a bug within nodeblock.
+ * The module nodeblock does not clean up the block table if the node was deleted.
+ *
+ * @return void
+ * @param $node
+ *  the node object that was deleted
+ */
+function blockct_node_delete($node) {
+  if($node->type == 'blockct') {
+    db_delete('block')
+      ->condition('module', 'nodeblock', '=')
+      ->condition('delta', $node->nid, '=')
+      ->execute();
+  }
+}
+
+/**
+ * Gets the current block css class set.
+ *
+ * @return emptry string/array
+ * @param $nid
+ *  int - the nodes nid
+ */
+function _blockct_get_block_css_class($nid) {
+  $result = db_select('block_class', 'b')
+    ->fields('b')
+    ->condition('module', 'nodeblock', '=')
+    ->condition('delta', $nid, '=')
+    ->range(0,1)
+    ->execute()
+    ->fetchAssoc();
+  if(is_array($result))
+    return $result['css_class'];
+  return '';
+}
+
+/**
+ * Gets the block data.
+ *
+ * @return empty string/array
+ * @param $nid
+ *  int - the nodes nid
+ */
+function _blockct_get_block_data($nid) {
+  $result = db_select('block', 'b')
+    ->fields('b')
+    ->condition('module', 'nodeblock', '=')
+    ->condition('delta', $nid, '=')
+    ->range(0,1)
+    ->execute()
+    ->fetchAssoc();
+  if(is_array($result))
+    return $result;
+  return '';
+}
+
+/**
+ * Helper function to get the current styles and the theme it is set to 
+ * from the blockct_styles table.
+ *
+ * @return array
+ * @param void
+ */
+function _blockct_get_style_data() {
+  $default_theme = variable_get('theme_default', 'bartik');
+  $result = db_select('blockct_styles', 'b')
+    ->fields('b')
+    ->condition('theme', $default_theme, '=')
+    ->range(0,1)
+    ->execute()
+    ->fetchAssoc();
+  if (is_array($result)) {
+    return $result;
+  }
+  return array();
+}
+
+/**
+ * Helper function to parse the style values from the database.
+ *
+ * @return array
+ *
+ * @param $style_data
+ *  The data from the text area in the format value|display.
+ */
+function _blockct_parse_styles($style_data) {
+    $values = array();
+    $data = explode("\n", $style_data);
+    if (is_array($data)) {
+      foreach ($data as $value) {
+        $tmp = explode('|', $value);
+        $values[trim($tmp[0])] = trim($tmp[1]);
+      }
+    }
+    return $values;
+}

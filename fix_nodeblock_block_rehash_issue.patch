@@ -1,0 +1,15 @@
+194,195c194
+<   $default_theme = variable_get('theme_default', 'bartik');
+<   _block_rehash($default_theme);
+---
+>   _block_rehash();
+230,231c229
+<   $default_theme = variable_get('theme_default', 'bartik');
+<   _block_rehash($default_theme);
+---
+>   _block_rehash();
+408c406
+< }
+---
+> }
+\ No newline at end of file
